@@ -9,6 +9,7 @@ using DataLayer.Interface;
 using Microsoft.EntityFrameworkCore;
 using StockExchange.ViewModel;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 namespace StockExchange;
 
 /// <summary>
@@ -18,46 +19,57 @@ public partial class App : Application
 {
 
     public static IServiceProvider Services { get; set; }
-    private CancellationTokenSource _cts = new CancellationTokenSource();
-
-    protected override async void OnStartup(StartupEventArgs e)
+    private IHost _host;
+    protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        var configuration = new ConfigurationBuilder().
-            SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("Config/appsettings.json", optional: false, reloadOnChange: true)
-            .Build();
-
-
-        var serviceCollection = new ServiceCollection();
-        serviceCollection.AddSingleton<IConfiguration>(configuration);
-        ConfigureServices(serviceCollection, configuration);
-        Services = serviceCollection.BuildServiceProvider();
-
-        var vm = Services.GetRequiredService<MainWindowViewModel>();
-        await vm.LoadAsync();
-
-        var mainWindow = Services.GetRequiredService<MainWindow>();
-        mainWindow.Show();
-
-
-        var tradeSim = Services.GetRequiredService<ITradeSimService>();
-        _ = tradeSim.StartAsync(_cts.Token);
+        Dispatcher.InvokeAsync(InitializeAsync);
 
     }
 
-
-    protected override void OnExit(ExitEventArgs e)
+    private async Task InitializeAsync()
     {
-        _cts.Cancel();
+        try
+        {
+            var host = Host.CreateDefaultBuilder()
+             .ConfigureAppConfiguration((context, config) =>
+                 {
+                     config.SetBasePath(AppContext.BaseDirectory);
+                     config.AddJsonFile("Config/appsettings.json", optional: false, reloadOnChange: true);
+                 })
+                 .ConfigureServices((context, services) =>
+                 {
+                     ConfigureServices(services, context.Configuration);
+                 })
+                 .Build();
+            _host = host;
+            Services = host.Services;
+            var mainWindow = Services.GetRequiredService<MainWindow>();
+            await host.StartAsync();
+            mainWindow.Show();
+
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed To start: {ex.Message}");
+            Shutdown();
+        }
+
+    }
+    protected override async void OnExit(ExitEventArgs e)
+    {
+        await _host.StopAsync();
+        _host.Dispose();
         base.OnExit(e);
+
     }
     private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddTransient<MainWindow>();
-        services.AddDbContext<ExchangeContext>(options => options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")), ServiceLifetime.Singleton);
-        services.AddSingleton<ITradeSimService,TradeSimService>();
+        services.AddDbContext<ExchangeContext>(options => options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+        services.AddHostedService<TradeSimService>();
+        services.AddSingleton<ICurrencyStorage,CurrencyStorage>();
         services.AddSingleton<IDbService, DbService>();
 
         services.AddSingleton<MainWindowViewModel>();

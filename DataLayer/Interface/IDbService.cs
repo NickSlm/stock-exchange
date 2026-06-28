@@ -10,6 +10,6 @@ namespace DataLayer.Interface
     public interface IDbService
     {
         Task<IList<CurrencyPairs>> PullData();
-        Task UpdateMinMax();
+        Task UpdateMinMax(IList<CurrencyPairs> pairs);
     }
 }

@@ -7,28 +7,44 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace StockExchange.ViewModel
 {
-    public class MainWindowViewModel: INotifyPropertyChanged
+    public class MainWindowViewModel: INotifyPropertyChanged, IDisposable
     {
-        private readonly ITradeSimService _tradeSimService;
-
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        public MainWindowViewModel(ITradeSimService tradeSimService)
+        private readonly ICurrencyStorage _storage;
+
+        public ObservableCollection<CurrencyPairs> Pairs { get; } = new();
+
+
+        public MainWindowViewModel(ICurrencyStorage storage)
         {
-            _tradeSimService = tradeSimService;
+            _storage = storage;
+            _storage.PairsUpdated += OnPairsUpdate;
         }
 
-        public async Task LoadAsync()
+        private void OnPairsUpdate(IList<CurrencyPairs> pairs)
         {
-            await _tradeSimService.LoadPairs();
+            if (!Pairs.Any())
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    foreach (var pair in pairs)
+                    {
+                        Pairs.Add(pair);
+                    }
+                });
+            }
         }
 
-        public ReadOnlyObservableCollection<CurrencyPairs> Pairs => _tradeSimService.Pairs;
-
+        public void Dispose()
+        {
+            _storage.PairsUpdated -= OnPairsUpdate;
+        }
         private void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     }

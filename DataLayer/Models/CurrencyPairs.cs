@@ -46,7 +46,6 @@ namespace DataLayer.Models
             }
         }
 
-
         [NotMapped]
         public decimal CurrentValue
         {
